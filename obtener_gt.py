@@ -3,6 +3,9 @@ import cv2
 import numpy as np
 import yaml
 import matplotlib.pyplot as plt
+import h5py
+import matplotlib as mpl
+import matplotlib.cm as cm
 
 def listar_ordenar(path):
     """
@@ -75,6 +78,7 @@ def compute_depth_from_disparity(disparity_path, disparity_map_filename, Q):
 
     return depth_map, valid_mask
 
+
 def est_self_motion_pseudo_inverse(X, Y, Dx, Dy, f, InvZ):
     """
     Estima el movimiento propio usando el método de pseudo-inversa.
@@ -116,6 +120,58 @@ def est_self_motion_pseudo_inverse(X, Y, Dx, Dy, f, InvZ):
     return {'Vel': Vel, 'Omega': Omega}
 
 
+def est_self_motion_given_depth_normal_flow(X, Y, Dx, Dy, inv_z: np.array):
+    # Fetch data from flow structure.
+    x = X
+    y = Y
+    u = Dx
+    v = Dy
+    inv_z = inv_z
+
+    # Get the gradient direction.
+    n = np.sqrt(u ** 2 + v ** 2)
+    nx = u / n
+    ny = v / n
+
+    # All constraints form an over-determined linear equation system A x = B.
+    a = np.column_stack([
+        -nx * inv_z,
+        -ny * inv_z,
+        nx * x * inv_z + ny * y * inv_z,
+        nx * x * y + ny * (1 + y ** 2),
+        -nx * (1 + x ** 2) - ny * x * y,
+        nx * y - ny * x
+    ])
+
+    b = n
+
+    # Solve the system by taking a least-squares solution (pseudo-inverse).
+    x_solution = np.linalg.pinv(a).dot(b)
+
+    # Format data
+    vel = x_solution[:3]
+    omega = x_solution[3:]
+
+
+    return vel, omega
+
+def disp_img_to_rgb_img(disp_array: np.ndarray):
+    disp_pixels = np.argwhere(disp_array > 0)
+    u_indices = disp_pixels[:, 1]
+    v_indices = disp_pixels[:, 0]
+    disp = disp_array[v_indices, u_indices]
+    max_disp = 80
+
+    norm = mpl.colors.Normalize(vmin=0, vmax=max_disp, clip=True)
+    mapper = cm.ScalarMappable(norm=norm, cmap='inferno')
+
+    disp_color = mapper.to_rgba(disp)[..., :3]
+    output_image = np.zeros((disp_array.shape[0], disp_array.shape[1], 3))
+    output_image[v_indices, u_indices, :] = disp_color
+    output_image = (255 * output_image).astype("uint8")
+    output_image = cv2.cvtColor(output_image, cv2.COLOR_RGB2BGR)
+    return output_image
+
 
 if __name__ == '__main__':
     
@@ -127,12 +183,14 @@ if __name__ == '__main__':
     gt_tensors_path = "./gt_tensors"
     rectified_images_path = "./images_rectified"
     mask_path = "./mask_tensors"
+    events_path = "./events/left"
 
     # Nombre de los archivos
     of_timestamps = "forward_timestamps.txt"
     image_timestamps = "image_timestamps.txt"
     dispartiy_timestamps = "disparity_timestamps.txt"
     reprojection_matrix = "cam_to_cam.yaml"
+    rectify_map_file = "rectify_map.h5"
 
     # Listar y ordenar los ficheros de los directorios
     depth_map_list = listar_ordenar(depth_path)
@@ -153,6 +211,14 @@ if __name__ == '__main__':
 
     Q = np.array(data["disparity_to_depth"]["cams_12"])
 
+    # Cargar la matriz de rectificación
+    rectmap_file = h5py.File(os.path.join(events_path, rectify_map_file))
+    rectmap = rectmap_file['rectify_map'][()]
+
+    print(f"El shape de rectmap es {rectmap.shape}")
+
+
+
     for i in range(1):
     #for i, file in enumerate(of_list):
         # timestamp para el que se va a obtener la gt
@@ -164,23 +230,13 @@ if __name__ == '__main__':
 
 
         # Indices para las imagenes y la disparidad que tienen el mismo timestamp
-        #index_image = np.where(image_timestamps == timestamp)[0][0]
         index_disparity = np.where(dispartiy_timestamps == timestamp)[0][0]
 
         #Cargamos la profunidad
         depth, mask_d = compute_depth_from_disparity(disparity_path, disparity_map_list[index_disparity], Q)
-
-
-
-        # Figure 1 with grayscale colormap
-        fig1 = plt.figure()
-        plt.imshow(depth, cmap='gray')
-        plt.colorbar()
-        plt.xlabel('X Label')
-        plt.ylabel('Y Label')
-        plt.title('Grayscale Colormap')
-
-        plt.show()
+        #Codigo para mostrar las imagenes de profundidad
+        # cv2.imshow("imagen",disp_img_to_rgb_img(depth))
+        # cv2.waitKey(0)
         print(f"Shape de la profundidad: {depth.shape}")
         invZ = 1.0 / depth[mask_d]
         print(f"Shape de la inversa de la profundidad: {invZ.shape}")
@@ -189,17 +245,13 @@ if __name__ == '__main__':
         Dy = Dy[mask_d]
         print(f"Shape de Dx: {Dx.shape}")
 
-        # Cargamos la imagen rectificada
-        # image_rectified = cv2.imread(os.path.join(rectified_images_path, rectified_images_list[index_image]), cv2.IMREAD_UNCHANGED)
-        # print(f"Shape de la imagen rectificada: {image_rectified.shape}")
+        coordenadas = np.array(np.where(mask_d))
+        X = rectmap[coordenadas[0], coordenadas[1], 0]
+        Y = rectmap[coordenadas[0], coordenadas[1], 1]
+        print(f"Los valores unique de X es de: {np.unique(X)}")
+        print(f"Los valores unique de Y es de: {np.unique(Y)}")
 
-        XY = np.array(np.where(mask_d))
-        print(f"Shape de XY: {XY.shape}")
 
-        X = XY[0]
-        Y = XY[1]
-        print(f"Shape de X: {X.shape}") 
-        
         ego_motion = est_self_motion_pseudo_inverse(X, Y, Dx, Dy, 1, invZ)
         print(ego_motion)
 
