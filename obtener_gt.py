@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 import h5py
 import matplotlib as mpl
 import matplotlib.cm as cm
+import imageio.v3 as iio
 
 def listar_ordenar(path):
     """
@@ -16,7 +17,7 @@ def listar_ordenar(path):
     files.sort()
     return files
 
-def load_optical_flow(of_path, filename, target_size=(1440, 1080)):
+def load_optical_flow(of_path, filename):
     """
     Carga y reescala el optical flow ground truth de un archivo PNG en el dataset DSEC.
     
@@ -31,14 +32,11 @@ def load_optical_flow(of_path, filename, target_size=(1440, 1080)):
     # Cargar la imagen PNG con flujo óptico
     flow_16bit = cv2.imread(os.path.join(of_path, filename), cv2.IMREAD_UNCHANGED)
     flow_16bit = cv2.cvtColor(flow_16bit, cv2.COLOR_BGR2RGB)
+
     # Separar los canales R, G y B
     flow_x = (flow_16bit[:, :, 0].astype(np.float32) - 2**15) / 128.0
     flow_y = (flow_16bit[:, :, 1].astype(np.float32) - 2**15) / 128.0
     valid_mask = flow_16bit[:, :, 2] > 0  # Píxeles válidos
-
-    print(flow_x.shape)
-
-
     
     # Optical Flow final
     flow_map = np.stack((flow_x, flow_y), axis=0).astype(np.float32)  # Shape (2, target_size[1], target_size[0])
@@ -153,7 +151,7 @@ def est_self_motion_given_depth_normal_flow(X, Y, Dx, Dy, inv_z: np.array):
     omega = x_solution[3:]
 
 
-    return vel, omega
+    return {'Vel': vel, 'Omega': omega}
 
 def disp_img_to_rgb_img(disp_array: np.ndarray):
     disp_pixels = np.argwhere(disp_array > 0)
@@ -172,6 +170,45 @@ def disp_img_to_rgb_img(disp_array: np.ndarray):
     output_image = cv2.cvtColor(output_image, cv2.COLOR_RGB2BGR)
     return output_image
 
+
+def generate_optical_flow_video(Dx, Dy, fps, filename='optical_flow.mp4', vmax=256.0):
+    """
+    Genera un video a partir del flujo óptico Dx y Dy.
+
+    Parámetros:
+        Dx: np.ndarray - Componente X del flujo óptico (frames, H, W)
+        Dy: np.ndarray - Componente Y del flujo óptico (frames, H, W)
+        fps: int - Fotogramas por segundo para el video
+        filename: str - Nombre del archivo de salida
+        vmax: float - Valor máximo para la normalización
+    """
+    n_frames, H, W = Dx.shape  # Obtener dimensiones del flujo óptico
+    fourcc = cv2.VideoWriter_fourcc(*'mp4v')  # Definir códec de video
+    out = cv2.VideoWriter(filename, fourcc, fps, (W, H), isColor=True)  # Inicializar el escritor de video
+
+    for i in range(n_frames):
+        # Calcular la magnitud y el ángulo del flujo óptico
+        V = np.sqrt(Dx[i] ** 2 + Dy[i] ** 2) / vmax  # Normalizar magnitud en [0, 1]
+        Theta = np.arctan2(Dy[i], Dx[i])  # Calcular ángulo del flujo óptico
+
+        # Crear una imagen en el espacio de color LAB
+        flow_Lab = np.zeros((H, W, 3), dtype=np.float32)
+        flow_Lab[:, :, 0] = 100 * V  # Asignar la magnitud al canal de luminosidad
+        flow_Lab[:, :, 1] = 127 * np.cos(Theta)  # Canal A basado en el ángulo
+        flow_Lab[:, :, 2] = 127 * np.sin(Theta)  # Canal B basado en el ángulo
+
+        # Convertir la imagen de LAB a RGB para visualización
+        flow_RGB = cv2.cvtColor(flow_Lab, cv2.COLOR_LAB2RGB)
+        flow_RGB = (flow_RGB * 255).astype(np.uint8)  # Escalar valores a rango [0, 255]
+
+        # Establecer en negro los píxeles sin flujo óptico
+        mask = (V == 0)
+        flow_RGB[mask] = [0, 0, 0]
+
+        out.write(flow_RGB)  # Escribir el frame en el video
+
+    out.release()  # Liberar el escritor de video
+    print(f"Video guardado como {filename}")
 
 if __name__ == '__main__':
     
@@ -217,16 +254,34 @@ if __name__ == '__main__':
 
     print(f"El shape de rectmap es {rectmap.shape}")
 
+    dx_frames = []
+    dy_frames = []
+    mask_optflow = []
 
+    #for i in range(32, 33):
+    for i, file in enumerate(of_list):
+        print("--------------------------------")
+        print(f"Estamos en la iteración: {i}")
 
-    for i in range(1):
-    #for i, file in enumerate(of_list):
         # timestamp para el que se va a obtener la gt
         timestamp = of_timestamps[i]
 
         #### Obtenemos los optical flow ground truth ####
-        Dx, Dy, mask_of = load_optical_flow(of_path, of_list[i], (1440, 1080))
+        Dx, Dy, mask_of = load_optical_flow(of_path, of_list[i])
+
+        # Código usado para generar el video
+        # if i == 0: # Uso siempre la misma máscara por simplificar
+        #     mask_optflow = mask_of
+        # ux = Dx
+        # yx = Dy
+        # ux[~mask_of] = 0
+        # yx[~mask_of] = 0
+        # dx_frames.append(ux)
+        # dy_frames.append(yx)
+
         print(f"Shape del optical flow de X: {Dx.shape}")
+        mask_of_zeros = (Dx != 0.0) & (Dy != 0.0)
+
 
 
         # Indices para las imagenes y la disparidad que tienen el mismo timestamp
@@ -234,26 +289,38 @@ if __name__ == '__main__':
 
         #Cargamos la profunidad
         depth, mask_d = compute_depth_from_disparity(disparity_path, disparity_map_list[index_disparity], Q)
+        # Unir las máscaras con una operación lógica AND
+        mask_combined = mask_d & mask_of
+        mask_combined = mask_combined & mask_of_zeros
         #Codigo para mostrar las imagenes de profundidad
         # cv2.imshow("imagen",disp_img_to_rgb_img(depth))
         # cv2.waitKey(0)
+
         print(f"Shape de la profundidad: {depth.shape}")
-        invZ = 1.0 / depth[mask_d]
+        invZ = 1.0 / depth[mask_combined]
         print(f"Shape de la inversa de la profundidad: {invZ.shape}")
 
-        Dx = Dx[mask_d]
-        Dy = Dy[mask_d]
+        Dx = Dx[mask_combined]
+        Dy = Dy[mask_combined]
+
+        if np.any(Dx == 0.0) and np.any(Dy == 0.0):
+            print("El optical flow contiene valores 0.0")
+        else:
+            print("No hay valores 0.0 en el optical flow")
         print(f"Shape de Dx: {Dx.shape}")
 
-        coordenadas = np.array(np.where(mask_d))
+        coordenadas = np.array(np.where(mask_combined))
         X = rectmap[coordenadas[0], coordenadas[1], 0]
         Y = rectmap[coordenadas[0], coordenadas[1], 1]
         print(f"Los valores unique de X es de: {np.unique(X)}")
         print(f"Los valores unique de Y es de: {np.unique(Y)}")
 
 
-        ego_motion = est_self_motion_pseudo_inverse(X, Y, Dx, Dy, 1, invZ)
+        ego_motion = est_self_motion_given_depth_normal_flow(X, Y, Dx, Dy, invZ)
         print(ego_motion)
 
-        
+    # Continuación del código usado para generar el vídeo
+    # dx_frames = np.stack(dx_frames, axis=0)
+    # dy_frames = np.stack(dy_frames, axis=0)
+    # generate_optical_flow_video(dx_frames, dy_frames, 11)
 
