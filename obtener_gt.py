@@ -1,12 +1,14 @@
 import os
 import cv2
 import numpy as np
+import pandas as pd
 import yaml
 import matplotlib.pyplot as plt
 import h5py
 import matplotlib as mpl
 import matplotlib.cm as cm
 import imageio.v3 as iio
+import pandas
 
 def listar_ordenar(path):
     """
@@ -36,12 +38,12 @@ def load_optical_flow(of_path, filename):
     # Separar los canales R, G y B
     flow_x = (flow_16bit[:, :, 0].astype(np.float32) - 2**15) / 128.0
     flow_y = (flow_16bit[:, :, 1].astype(np.float32) - 2**15) / 128.0
-    valid_mask = flow_16bit[:, :, 2] > 0  # Píxeles válidos
+    valid_mask = flow_16bit[:, :, 2].astype(bool)  # Píxeles válidos
     
     # Optical Flow final
     flow_map = np.stack((flow_x, flow_y), axis=0).astype(np.float32)  # Shape (2, target_size[1], target_size[0])
     
-    return flow_x, flow_y, valid_mask.astype(bool)
+    return flow_x, flow_y, valid_mask
 
 def compute_depth_from_disparity(disparity_path, disparity_map_filename, Q):
     """
@@ -210,6 +212,7 @@ def generate_optical_flow_video(Dx, Dy, fps, filename='optical_flow.mp4', vmax=2
     out.release()  # Liberar el escritor de video
     print(f"Video guardado como {filename}")
 
+
 if __name__ == '__main__':
     # Directorio global
     global_path = "./zurich_city_02_d"
@@ -243,7 +246,6 @@ if __name__ == '__main__':
     # # Cargar la matriz de rectificación del propio dataset
     # rectmap_file = h5py.File(os.path.join(events_path, rectify_map_file))
     # rectmap = rectmap_file['rectify_map'][()]
-    #
     # print(f"El shape de rectmap es {rectmap.shape}")
 
     ### Crear la matriz de rectificación a partir de los datos de calibración del dataset ###
@@ -263,8 +265,35 @@ if __name__ == '__main__':
     dist_xy_map   = np.stack((dist_x_map[:, np.newaxis], dist_y_map[:, np.newaxis]), axis=2)
 
     undist_xy_map = cv2.undistortPoints(dist_xy_map, camera_matrix, distortion_coeffs)
-    undist_x_map  = undist_xy_map[:, :, 0].flatten().reshape(480, 640)
-    undist_y_map  = undist_xy_map[:, :, 1].flatten().reshape(480, 640)
+    undist_x_map  = undist_xy_map[:, :, 0].flatten()
+    undist_y_map  = undist_xy_map[:, :, 1].flatten()
+
+    # Compute velocity coeffs.
+    vel_coeffs = np.zeros((len(undist_x_map), 2, 3), dtype=np.float32)
+
+    vel_coeffs[:, 0, 0] = -1.0
+    vel_coeffs[:, 1, 0] = 0.0
+
+    vel_coeffs[:, 0, 1] = 0.0
+    vel_coeffs[:, 1, 1] = -1.0
+
+    vel_coeffs[:, 0, 2] = undist_x_map
+    vel_coeffs[:, 1, 2] = undist_y_map
+
+    # Compute omega coeffs.
+    omega_coeffs = np.zeros((len(undist_x_map), 2, 3), dtype=np.float32)
+
+    omega_coeffs[:, 0, 0] = undist_x_map * undist_y_map
+    omega_coeffs[:, 1, 0] = 1.0 + undist_y_map ** 2
+
+    omega_coeffs[:, 0, 1] = -(1.0 + undist_x_map ** 2)
+    omega_coeffs[:, 1, 1] = -(undist_x_map * undist_y_map)
+
+    omega_coeffs[:, 0, 2] = undist_y_map
+    omega_coeffs[:, 1, 2] = -undist_x_map
+
+    undist_x_map = undist_x_map.reshape(480, 640)
+    undist_y_map = undist_y_map.reshape(480, 640)
 
     print(f"Undistorted image plane shape: {undist_y_map.shape}")
     print(f"Undistorted image plane shape: {undist_x_map.shape}")
@@ -273,13 +302,17 @@ if __name__ == '__main__':
     # dx_frames = []
     # dy_frames = []
     # mask_optflow = []
+    #
+    # undist_x_frames = []
+    # undist_y_frames = []
 
-    vel_x, vel_y, vel_z = [], [], []
-    omega_x, omega_y, omega_z = [], [], []
-    plt.ion()  # Habilitar el modo interactivo de Matplotlib
-    fig, axs = plt.subplots(2, 1, figsize=(10, 6))  # Dos subgráficos: uno para Vel y otro para Omega
+    # Necesario para crear los gráficos
+    # vel_x, vel_y, vel_z = [], [], []
+    # omega_x, omega_y, omega_z = [], [], []
+    # plt.ion()  # Habilitar el modo interactivo de Matplotlib
+    # fig, axs = plt.subplots(2, 1, figsize=(10, 6))  # Dos subgráficos: uno para Vel y otro para Omega
 
-    #for i in range(32, 33):
+    # for i in range(32, 33):
     for i, file in enumerate(of_list):
         print("--------------------------------")
         print(f"Estamos en la iteración: {i}")
@@ -292,17 +325,7 @@ if __name__ == '__main__':
         print(f"Shape del optical flow de X: {Dx.shape}")
 
         # Creo la mascara de donde X e Y en el optical flow son 0's
-        mask_of_zeros = (Dx != 0.0) & (Dy != 0.0)
-
-        # Código usado para generar el video
-        # if i == 0: # Uso siempre la misma máscara por simplificar
-        #     mask_optflow = mask_of
-        # ux = Dx
-        # yx = Dy
-        # # ux[~mask_of] = 0
-        # # yx[~mask_of] = 0
-        # dx_frames.append(ux)
-        # dy_frames.append(yx)
+        # mask_of_zeros = (Dx != 0.0) & (Dy != 0.0)
 
         # Indices para las imagenes y la disparidad que tienen el mismo timestamp
         index_disparity = np.where(dispartiy_timestamps == timestamp)[0][0]
@@ -311,11 +334,21 @@ if __name__ == '__main__':
         depth, mask_d = compute_depth_from_disparity(disparity_path, disparity_map_list[index_disparity], Q)
 
         # Unir las máscaras de disparidad, optical flow y ceros
-        mask_combined = mask_d & mask_of & mask_of_zeros
+        mask_combined = mask_d & mask_of
 
         # #Codigo para mostrar las imagenes de profundidad
         # cv2.imshow("imagen",disp_img_to_rgb_img(depth))
         # cv2.waitKey(0)
+
+        # Código usado para generar el video
+        # if i == 0:  # Uso siempre la misma máscara por simplificar
+        #     mask_optflow = mask_of
+        # ux = Dx
+        # yx = Dy
+        # ux[~mask_combined] = 0
+        # yx[~mask_combined] = 0
+        # dx_frames.append(ux)
+        # dy_frames.append(yx)
 
         # Obtener la inversa de la profundidad
         print(f"Shape de la profundidad: {depth.shape}")
@@ -339,42 +372,70 @@ if __name__ == '__main__':
         print(f"Los valores unique de Y es de: {np.unique(Y)}")
 
         # Calculamos el ego motion a partir de los datos
-        ego_motion = est_self_motion_given_depth_normal_flow(X, Y, Dx, Dy, invZ)
+        ego_motion = est_self_motion_pseudo_inverse(X, Y, Dx, Dy, 1, invZ)
         print(ego_motion)
 
+        inv_z = invZ.reshape(-1,1,1)
+        A = vel_coeffs[mask_combined.flatten(), :, :]
+        B = omega_coeffs[mask_combined.flatten(), :, :]
+        vel = ego_motion['Vel']
+        omega = ego_motion['Omega']
+        dt = 1
+
+        undist_uv = inv_z * A @ vel + B @ omega
+        undist_u = undist_uv[:, 0]
+        undist_v = undist_uv[:, 1]
+
+        of_x = np.zeros_like(mask_combined, dtype=np.float32)
+        of_x[mask_combined] = undist_u
+
+        of_y = np.zeros_like(mask_combined, dtype=np.float32)
+        of_y[mask_combined] = undist_v
+
+        # Código necesario para crear el video del optical flow reconstruido
+        # undist_x_frames.append(of_x)
+        # undist_y_frames.append(of_y)
+
+        print(f"El shape de undist_u es: {undist_u.shape}")
+
+
         # Extraer valores de Vel y Omega
-        vel_x.append(ego_motion['Vel'][0])
-        vel_y.append(ego_motion['Vel'][1])
-        vel_z.append(ego_motion['Vel'][2])
-
-        omega_x.append(ego_motion['Omega'][0])
-        omega_y.append(ego_motion['Omega'][1])
-        omega_z.append(ego_motion['Omega'][2])
-
-        # Limpiar y actualizar el gráfico
-        axs[0].cla()
-        axs[0].plot(vel_x, label='Vel X', color='r')
-        axs[0].plot(vel_y, label='Vel Y', color='g')
-        axs[0].plot(vel_z, label='Vel Z', color='b')
-        axs[0].set_title("Velocidad (Vel)")
-        axs[0].legend()
-        axs[0].set_ylabel("Valor")
-
-        axs[1].cla()
-        axs[1].plot(omega_x, label='Omega X', color='r')
-        axs[1].plot(omega_y, label='Omega Y', color='g')
-        axs[1].plot(omega_z, label='Omega Z', color='b')
-        axs[1].set_title("Velocidad Angular (Omega)")
-        axs[1].legend()
-        axs[1].set_ylabel("Valor")
-
-        plt.pause(0.1)  # Pausar para visualizar los cambios en tiempo real
-
-    plt.ioff()  # Desactivar el modo interactivo
-    plt.show()  # Mostrar la gráfica final
+    #     vel_x.append(ego_motion['Vel'][0])
+    #     vel_y.append(ego_motion['Vel'][1])
+    #     vel_z.append(ego_motion['Vel'][2])
+    #
+    #     omega_x.append(ego_motion['Omega'][0])
+    #     omega_y.append(ego_motion['Omega'][1])
+    #     omega_z.append(ego_motion['Omega'][2])
+    #
+    #     # Limpiar y actualizar el gráfico
+    #     axs[0].cla()
+    #     axs[0].plot(vel_x, label='Vel X', color='r')
+    #     axs[0].plot(vel_y, label='Vel Y', color='g')
+    #     axs[0].plot(vel_z, label='Vel Z', color='b')
+    #     axs[0].set_title("Velocidad (Vel)")
+    #     axs[0].legend()
+    #     axs[0].set_ylabel("Valor")
+    #
+    #     axs[1].cla()
+    #     axs[1].plot(omega_x, label='Omega X', color='r')
+    #     axs[1].plot(omega_y, label='Omega Y', color='g')
+    #     axs[1].plot(omega_z, label='Omega Z', color='b')
+    #     axs[1].set_title("Velocidad Angular (Omega)")
+    #     axs[1].legend()
+    #     axs[1].set_ylabel("Valor")
+    #
+    #     plt.pause(0.1)  # Pausar para visualizar los cambios en tiempo real
+    #
+    # plt.ioff()  # Desactivar el modo interactivo
+    # plt.show()  # Mostrar la gráfica final
 
     # Continuación del código usado para generar el vídeo
     # dx_frames = np.stack(dx_frames, axis=0)
     # dy_frames = np.stack(dy_frames, axis=0)
     # generate_optical_flow_video(dx_frames, dy_frames, 11)
+    #
+    # undist_x_frames = np.stack(undist_x_frames, axis=0)
+    # undist_y_frames = np.stack(undist_y_frames, axis=0)
+    # generate_optical_flow_video(undist_x_frames, undist_y_frames, 11, 'undistorted_of.mp4')
 
