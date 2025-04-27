@@ -3,7 +3,9 @@ import torch
 import torch.nn as nn
 
 from spikingegomotion import SpikingEgoMotionNet
+from spikingegomotion import ODSpikingEgoMotionNet
 from egomotiondataset import EgoMotionDataset
+from egomotiondataset import FlowAugmentation
 
 import math
 import os
@@ -14,13 +16,13 @@ import wandb
 from spikingjelly.activation_based import functional
 
 wandb.init(project="TFG",
-    name="SpikingEgoMotionNet_v1_10",
+    name="SpikingEgoMotionNet",
     mode="online",
     config={
     "architecture": "SpikingEgoMotionNet",
-    "epochs": 20,
+    "epochs": 30,
     "batch_size": 1,
-    "T": 10,
+    "T": 4,
     "lr": 1e-3
 })
 
@@ -82,9 +84,9 @@ wandb.watch(model, log="all", log_freq=10)
 
 criterion = nn.MSELoss()
 optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
-epochs = 20
+epochs = 30
 
-for epoch in range(epochs):
+for epoch in tqdm(range(epochs)):
     model.train()
     train_loss = 0.0
 

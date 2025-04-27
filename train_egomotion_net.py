@@ -2,8 +2,9 @@ import random
 import torch
 import torch.nn as nn
 
-from egomotionnet import EgoMotionNet
+from egomotionnet import *
 from egomotiondataset import EgoMotionDataset
+from egomotiondataset import FlowAugmentation
 
 import math
 import os
@@ -14,10 +15,10 @@ import wandb
 
 wandb.init(
     project="TFG",
-    name="EgoMotionNet",
+    name="EgoMotionNetV4",
     mode="online",
     config={
-        "epochs": 20,
+        "epochs": 100,
         "batch_size": 1,
         "learning_rate": 1e-3,
         "optimizer": "Adam",
@@ -66,6 +67,7 @@ ego_val = ego_motions[val_idx]
 
 
 # Crear datasets
+# train_dataset = EgoMotionDataset(opt_flow_train, ego_train, transform=FlowAugmentation(noise_std=(opt_flow_train.std() * 0.05), drop_prob=0))
 train_dataset = EgoMotionDataset(opt_flow_train, ego_train)
 val_dataset   = EgoMotionDataset(opt_flow_val, ego_val)
 
@@ -78,14 +80,18 @@ val_loader   = torch.utils.data.DataLoader(val_dataset, batch_size=1, shuffle=Fa
 ##############
 
 
-model = EgoMotionNet().to(device)
+model = EgoMotionNetV4().to(device)
 wandb.watch(model, log="all", log_freq=10)
 
 
 criterion = nn.MSELoss()
 optimizer = optim.Adam(model.parameters(), lr=1e-3)
 
-num_epochs = 20
+num_epochs = 80
+
+early_stopping_patience = 80  # Épocas sin mejorar antes de parar
+best_val_loss = math.inf
+epochs_without_improvement = 0
 
 for epoch in tqdm(range(num_epochs)):
     model.train()
@@ -122,6 +128,18 @@ for epoch in tqdm(range(num_epochs)):
         "train_loss": avg_train_loss,
         "val_loss": avg_val_loss
     })
+
+    # ---- EARLY STOPPING ----
+    if avg_val_loss < best_val_loss:
+        best_val_loss = avg_val_loss
+        epochs_without_improvement = 0
+
+    else:
+        epochs_without_improvement += 1
+
+    if epochs_without_improvement >= early_stopping_patience:
+        print(f"Early stopping triggered at epoch {epoch+1}!")
+        break
 
 
 wandb.finish()

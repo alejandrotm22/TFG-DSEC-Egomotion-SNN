@@ -215,10 +215,10 @@ def generate_optical_flow_video(Dx, Dy, fps, filename='optical_flow.mp4', vmax=2
 
 if __name__ == '__main__':
     # Directorio global
-    dataset_path = "/home/alejandro/Escritorio/TFG/DSEC_data/"
+    dataset_path = "/media/alejandro/EXTERNAL_US/train"
     data_saved_path = "/home/alejandro/Escritorio/TFG/TFG-DSEC-Egomotion-SNN/dataset"
 
-    archivos = ["thun", "zurich_city_02_d"]
+    archivos = ["thun_00_a", "zurich_city_02_d", 'zurich_city_03_a']
 
     # Vector para almacenar el ego-motion
     gt_ego_motion = []
@@ -228,13 +228,13 @@ if __name__ == '__main__':
         global_path = os.path.join(dataset_path, archivo)
         # Nombre de los directorios
         calibration_path = os.path.join(global_path, "calibration")
-        disparity_path = os.path.join(global_path, "disparity_event")
+        disparity_path = os.path.join(global_path, "disparity", "event")
         of_path = os.path.join(global_path, "flow", "forward")
         events_path = os.path.join(global_path, "events", "left")
 
         # Nombre de los archivos
-        of_timestamps = os.path.join(global_path, "forward_timestamps.txt")
-        dispartiy_timestamps = os.path.join(global_path, "disparity_timestamps.txt")
+        of_timestamps = os.path.join(global_path, "flow","forward_timestamps.txt")
+        dispartiy_timestamps = os.path.join(global_path, "disparity","timestamps.txt")
         calibration = "cam_to_cam.yaml"
         rectify_map_file = "rectify_map.h5"
 
