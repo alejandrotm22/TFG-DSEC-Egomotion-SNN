@@ -15,10 +15,10 @@ import wandb
 
 wandb.init(
     project="TFG",
-    name="EgoMotionNetV4",
+    name="EgoMotionNetV10",
     mode="online",
     config={
-        "epochs": 100,
+        "epochs": 80,
         "batch_size": 1,
         "learning_rate": 1e-3,
         "optimizer": "Adam",
@@ -67,7 +67,8 @@ ego_val = ego_motions[val_idx]
 
 
 # Crear datasets
-# train_dataset = EgoMotionDataset(opt_flow_train, ego_train, transform=FlowAugmentation(noise_std=(opt_flow_train.std() * 0.05), drop_prob=0))
+# train_dataset = EgoMotionDataset(opt_flow_train, ego_train, transform=FlowAugmentation(noise_std=(opt_flow_train.std() * 0.05), drop_prob=0.05))
+# train_dataset = EgoMotionDataset(opt_flow_train, ego_train, transform=FlowAugmentation(noise_std=0.1, drop_prob=0))
 train_dataset = EgoMotionDataset(opt_flow_train, ego_train)
 val_dataset   = EgoMotionDataset(opt_flow_val, ego_val)
 
@@ -80,7 +81,7 @@ val_loader   = torch.utils.data.DataLoader(val_dataset, batch_size=1, shuffle=Fa
 ##############
 
 
-model = EgoMotionNetV4().to(device)
+model = EgoMotionNetV10().to(device)
 wandb.watch(model, log="all", log_freq=10)
 
 
@@ -89,7 +90,7 @@ optimizer = optim.Adam(model.parameters(), lr=1e-3)
 
 num_epochs = 80
 
-early_stopping_patience = 80  # Épocas sin mejorar antes de parar
+early_stopping_patience = 15  # Épocas sin mejorar antes de parar
 best_val_loss = math.inf
 epochs_without_improvement = 0
 

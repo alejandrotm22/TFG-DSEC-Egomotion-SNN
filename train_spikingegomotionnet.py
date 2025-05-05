@@ -2,8 +2,7 @@ import random
 import torch
 import torch.nn as nn
 
-from spikingegomotion import SpikingEgoMotionNet
-from spikingegomotion import ODSpikingEgoMotionNet
+from spikingegomotion import *
 from egomotiondataset import EgoMotionDataset
 from egomotiondataset import FlowAugmentation
 
@@ -16,7 +15,7 @@ import wandb
 from spikingjelly.activation_based import functional
 
 wandb.init(project="TFG",
-    name="SpikingEgoMotionNet",
+    name="SpikingEgoMotionNetV9",
     mode="online",
     config={
     "architecture": "SpikingEgoMotionNet",
@@ -79,12 +78,12 @@ val_loader   = torch.utils.data.DataLoader(val_dataset, batch_size=1, shuffle=Fa
 ##############
 
 
-model = SpikingEgoMotionNet(T=4).to(device)
+model = SpikingEgoMotionNetV9(T=4).to(device)
 wandb.watch(model, log="all", log_freq=10)
 
 criterion = nn.MSELoss()
 optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
-epochs = 30
+epochs = 80
 
 for epoch in tqdm(range(epochs)):
     model.train()
