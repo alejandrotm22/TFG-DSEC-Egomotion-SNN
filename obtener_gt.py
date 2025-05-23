@@ -218,7 +218,7 @@ if __name__ == '__main__':
     dataset_path = "/media/alejandro/EXTERNAL_US/train"
     data_saved_path = "/home/alejandro/Escritorio/TFG/TFG-DSEC-Egomotion-SNN/dataset"
 
-    archivos = ["thun_00_a", "zurich_city_02_d", 'zurich_city_03_a']
+    archivos = ['zurich_city_08_a']
 
     # Vector para almacenar el ego-motion
     gt_ego_motion = []
@@ -360,7 +360,7 @@ if __name__ == '__main__':
             # Obtener la inversa de la profundidad
             invZ = 1.0 / depth[mask_combined]
 
-            # Le pasamos la máscara al óptical flow y lo dividimo por la focal para obtener las unidades correctas
+            # Le pasamos la máscara al óptical flow y lo dividimos por la focal para obtener las unidades correctas
             Dx = Dx[mask_combined] / data["intrinsics"]["camRect0"]["camera_matrix"][0]
             Dy = Dy[mask_combined] / data["intrinsics"]["camRect0"]["camera_matrix"][1]
 
@@ -438,7 +438,7 @@ if __name__ == '__main__':
 
     ### Almacenamos el ego-motion
     gt_ego_motion = np.stack(gt_ego_motion, axis=0).astype(np.float32)
-    np.save(os.path.join(data_saved_path, "gt_ego_motion.npy"), gt_ego_motion)
-    print(f"Se ha guardado el ego-motion en {data_saved_path}/gt_ego_motion.npy")
+    np.save(os.path.join(data_saved_path, "test_gt_ego_motion.npy"), gt_ego_motion)
+    print(f"Se ha guardado el ego-motion en {data_saved_path}/test_gt_ego_motion.npy")
     print(f"El shape del ego-motion es {gt_ego_motion.shape}")
 

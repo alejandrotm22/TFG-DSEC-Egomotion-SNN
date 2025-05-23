@@ -25,7 +25,7 @@ class FlowAugmentation:
         self.drop_prob = drop_prob
 
     def __call__(self, flow):
-        flow = self.add_flow_noise(flow, scale=self.noise_std)
+        flow = self.add_flow_noise(flow, self.noise_std)
         flow = self.random_occlusion(flow, drop_prob=self.drop_prob)
         
         return flow  
