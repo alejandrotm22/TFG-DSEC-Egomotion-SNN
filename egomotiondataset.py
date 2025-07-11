@@ -30,22 +30,22 @@ class FlowAugmentation:
         
         return flow  
       
-    # # Add Gaussian noise to the flow
-    # def add_flow_noise(self, flow, std=0.1):
-    #     noise = torch.randn_like(flow) * std
-    #     return flow + noise
+    # Add Gaussian noise to the flow
+    def add_flow_noise(self, flow, std=0.1):
+        noise = torch.randn_like(flow) * std
+        return flow + noise
     
-    # def add_flow_noise(self, flow, std_scale=0.1, min_std=1e-4):
-    #     # Magnitud del flujo por píxel (euclídea si el flujo tiene 2 canales: u, v)
-    #     magnitude = torch.norm(flow, dim=1, keepdim=True)  # Shape: (B, 1, H, W)
+    def add_flow_noise(self, flow, std_scale=0.1, min_std=1e-4):
+        # Magnitud del flujo por píxel (euclídea si el flujo tiene 2 canales: u, v)
+        magnitude = torch.norm(flow, dim=1, keepdim=True)  # Shape: (B, 1, H, W)
 
-    #     # Calcula desviación estándar proporcional, pero con un mínimo para evitar 0
-    #     std = magnitude * std_scale
-    #     std = torch.clamp(std, min=min_std)
+        # Calcula desviación estándar proporcional, pero con un mínimo para evitar 0
+        std = magnitude * std_scale
+        std = torch.clamp(std, min=min_std)
 
-    #     # Ruido gaussiano dependiente del flujo
-    #     noise = torch.randn_like(flow) * std
-    #     return flow + noise
+        # Ruido gaussiano dependiente del flujo
+        noise = torch.randn_like(flow) * std
+        return flow + noise
     
     def add_flow_noise(self, flow, scale=0.1, min_std=1e-4):
         """
