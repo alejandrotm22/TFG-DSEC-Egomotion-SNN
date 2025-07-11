@@ -3,7 +3,7 @@
 Este repositorio forma parte del **Proyecto de Fin de Grado en Ingeniería Informática y ADE** de la Universidad de Granada, y explora el uso de **redes neuronales tradicionales y redes neuronales de impulsos (SNNs)** para la **estimación de egomotion** a partir de datos capturados con cámaras de eventos (dataset DSEC).
 
 <p align="center">
-<img src="./images/Optical_flow.png" alt="Optical flow" />
+<img src="./images/Optical_flow1.png" alt="Optical flow" />
 </p>
 
 ## Estructura del proyecto
