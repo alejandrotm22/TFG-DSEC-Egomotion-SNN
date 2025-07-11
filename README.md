@@ -2,6 +2,10 @@
 
 Este repositorio forma parte del **Proyecto de Fin de Grado en Ingeniería Informática y ADE** de la Universidad de Granada, y explora el uso de **redes neuronales tradicionales y redes neuronales de impulsos (SNNs)** para la **estimación de egomotion** a partir de datos capturados con cámaras de eventos (dataset DSEC).
 
+<p align="center">
+<img src="./images/Optical_flow.png" alt="Optical flow" />
+</p>
+
 ## Estructura del proyecto
 
 A continuación se describen los archivos y carpetas principales:
@@ -24,6 +28,19 @@ A continuación se describen los archivos y carpetas principales:
 - **train_spikingegomotionnet.py**  
     Implementación del entrenamiento, validación y test de las redes SNNs.
 
+Se recomienda una carpeta adicional llamada `dataset` donde se introduzcan los arrays de numpy con el ground truth tanto de ego-motion como de flujo óptico.
+
+Estructura recomendada:
+
+```
+TFG-DSEC-Egomotion-SNN/
+    ├── dataset/
+    │      ├─── gp_ego_motion.py
+    |      ├─── optical_flow.npy
+    |      ├─── test_gt_ego_motion.npy
+    │      └─── test_optical_flow.npy
+    └── ...
+```
 ## Requisitos
 
 El proyecto se ha desarrollado usando Python 3.8+ y requiere varias librerías, como:
